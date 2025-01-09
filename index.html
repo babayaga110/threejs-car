@@ -105,6 +105,9 @@
             // Orbit Controls
             controls = new OrbitControls(camera, renderer.domElement);
 
+            // Add Ambient Light for general illumination
+            const ambientLight = new THREE.AmbientLight(0x404040, 1); // Soft white light
+            scene.add(ambientLight);
             // Light setup
             const light = new THREE.DirectionalLight(0xffffff, 1);
             light.position.set(5, 10, 7.5);
@@ -120,7 +123,7 @@
                     scene.add(carModel);
 
                     carModel.traverse((child) => {
-                        // console.log(child.name)
+                        console.log(child.name)
                         if (child.name.includes("Doors")) {
                             doors.push(child.name)
                         }
@@ -181,20 +184,20 @@
             });
         }
         function openBonets() {
-  if (!bonets || bonets.length === 0) return;
+            if (!bonets || bonets.length === 0) return;
 
-  bonets.forEach((bonetName) => {
-    const bonet = carModel.getObjectByName(bonetName);
-    if (bonet) {
-      // Check if the bonnet is open (rotation < 0) or closed (rotation == 0)
-      if (bonet.rotation.x === 0) {
-        bonet.rotation.x = -Math.PI / 4; // Open bonnet upwards
-      } else {
-        bonet.rotation.x = 0; // Close bonnet
-      }
-    }
-  });
-}
+            bonets.forEach((bonetName) => {
+                const bonet = carModel.getObjectByName(bonetName);
+                if (bonet) {
+                    // Check if the bonnet is open (rotation < 0) or closed (rotation == 0)
+                    if (bonet.rotation.x === 0) {
+                        bonet.rotation.x = -Math.PI / 4; // Open bonnet upwards
+                    } else {
+                        bonet.rotation.x = 0; // Close bonnet
+                    }
+                }
+            });
+        }
 
 
 
