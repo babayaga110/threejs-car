@@ -152,6 +152,9 @@
             document.getElementById('door').addEventListener("click", openDoors);
             document.getElementById('boot').addEventListener("click", openBoot)
             document.getElementById('bonet').addEventListener("click", openBonets);
+            // Add event listeners for mousemove and click events
+            window.addEventListener('mousemove', onMouseMove);
+            window.addEventListener("click", onMouseClick);
         }
 
         function openDoors(event) {
@@ -200,7 +203,115 @@
         }
 
 
+        // Track whether the cursor is hovering over a clickable area
+        let isHovering = false;
 
+        function onMouseMove(event) {
+            if ((!doors || doors.length === 0) && (!bonets || bonets.length === 0) && (!boot || boot.length === 0)) return;
+
+            // Convert mouse coordinates to normalized device coordinates
+            const mouse = new THREE.Vector2();
+            mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
+            mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+
+            // Raycaster to detect intersections
+            const raycaster = new THREE.Raycaster();
+            raycaster.setFromCamera(mouse, camera);
+
+            // Function to check for intersections and set cursor style
+            const checkHover = (objectName, objectType) => {
+                const object = carModel.getObjectByName(objectName);
+                if (!object) return false;
+
+                const intersects = raycaster.intersectObject(object);
+                if (intersects.length > 0) {
+                    // Set cursor to pointer if intersected
+                    return true;
+                }
+                return false;
+            };
+
+            // Check if the cursor is hovering over any door, bonet, or boot
+            isHovering = false;
+
+            for (let i = 0; i < doors.length; i++) {
+                if (checkHover(doors[i], 'door')) {
+                    isHovering = true;
+                    break;
+                }
+            }
+
+            for (let i = 0; i < bonets.length; i++) {
+                if (checkHover(bonets[i], 'bonet')) {
+                    isHovering = true;
+                    break;
+                }
+            }
+
+            for (let i = 0; i < boot.length; i++) {
+                if (checkHover(boot[i], 'boot')) {
+                    isHovering = true;
+                    break;
+                }
+            }
+
+            // Change cursor style
+            document.body.style.cursor = isHovering ? 'pointer' : 'auto';
+        }
+
+        function onMouseClick(event) {
+            // Ensure all arrays (doors, bonets, boot) exist
+            if ((!doors || doors.length === 0) && (!bonets || bonets.length === 0) && (!boot || boot.length === 0)) return;
+
+            // Convert mouse coordinates to normalized device coordinates
+            const mouse = new THREE.Vector2();
+            mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
+            mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+
+            // Raycaster to detect intersections
+            const raycaster = new THREE.Raycaster();
+            raycaster.setFromCamera(mouse, camera);
+
+            // Function to handle the rotation toggling logic for each object (door, bonet, boot)
+            const toggleRotation = (objectName, objectType) => {
+                const object = carModel.getObjectByName(objectName);
+                if (!object) return;
+
+                const intersects = raycaster.intersectObject(object);
+
+                if (intersects.length > 0) {
+                    if (objectType === 'door') {
+                        // Handle door rotation
+                        if (objectName.includes("FR") || objectName.includes("RR")) {
+                            object.rotation.y = object.rotation.y === 0 ? Math.PI / 2 : 0; // Right-side doors
+                        } else if (objectName.includes("FL") || objectName.includes("RL")) {
+                            object.rotation.y = object.rotation.y === 0 ? -Math.PI / 2 : 0; // Left-side doors
+                        }
+                    } else if ( objectType === 'boot') {
+                        // Handle bonet or boot rotation (assuming they have a similar toggle logic)
+                        object.rotation.x = object.rotation.x === 0 ? Math.PI / 2 : 0; // Toggle open/close for bonet or boot
+                    }else if (objectType === 'bonet') {
+                        // Handle bonet rotation
+                        object.rotation.x = object.rotation.x === 0 ? -Math.PI / 4 : 0; // Open/close bonet
+                    }
+                }
+            };
+
+            // Check for intersections with doors
+            for (let i = 0; i < doors.length; i++) {
+                toggleRotation(doors[i], 'door');
+            }
+
+            // Check for intersections with bonets
+            for (let i = 0; i < bonets.length; i++) {
+                toggleRotation(bonets[i], 'bonet');
+            }
+
+            // Check for intersections with boot
+            for (let i = 0; i < boot.length; i++) {
+                toggleRotation(boot[i], 'boot');
+            }
+        }
 
 
         function animate() {
