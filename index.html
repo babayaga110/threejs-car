@@ -56,7 +56,17 @@
         <button id="door">Doors</button>
         <button id="boot">Boot</button>
         <button id="bonet">Bonet</button>
+        <button id="Engine">Engine</button>
+        <button id="removeBags">Boot Space</button>
     </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/gsap.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/gsap.min.js"></script>
+
+    <script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/ScrollTrigger.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/Draggable.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/MotionPathPlugin.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/TextPlugin.min.js"></script>
 
     <script type="importmap">
         {
@@ -79,6 +89,8 @@
         let doors = [];
         let boot = [];
         let bonets = [];
+        let engine = [];
+        let bags = [];
 
         init();
         animate();
@@ -100,62 +112,84 @@
             // Renderer setup
             renderer = new THREE.WebGLRenderer({ antialias: true });
             renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.shadowMap.enabled = true; // Enable shadows
+            renderer.shadowMap.type = THREE.PCFSoftShadowMap; // Use soft shadows
             document.body.appendChild(renderer.domElement);
 
             // Orbit Controls
             controls = new OrbitControls(camera, renderer.domElement);
 
-            // Add Ambient Light for general illumination
-            const ambientLight = new THREE.AmbientLight(0x404040, 1); // Soft white light
+            // Ambient Light for general illumination
+            const ambientLight = new THREE.AmbientLight(0x404040, 0.8); // Softer intensity
             scene.add(ambientLight);
-            // Light setup
-            const light = new THREE.DirectionalLight(0xffffff, 1);
-            light.position.set(5, 10, 7.5);
-            scene.add(light);
+
+            // Directional Light for main illumination
+            const directionalLight = new THREE.DirectionalLight(0xffffff, 1.2);
+            directionalLight.position.set(5, 10, 7.5);
+            directionalLight.castShadow = true;
+
+            // Configure shadow properties
+            directionalLight.shadow.mapSize.width = 2048; // Increase shadow map resolution
+            directionalLight.shadow.mapSize.height = 2048;
+            directionalLight.shadow.camera.near = 0.1;
+            directionalLight.shadow.camera.far = 50;
+            directionalLight.shadow.bias = -0.005; // Adjust bias to reduce shadow acne
+            scene.add(directionalLight);
+
+            // SpotLight for focused illumination
+            const spotLight = new THREE.SpotLight(0xffffff, 1);
+            spotLight.position.set(2, 10, 5);
+            spotLight.castShadow = true;
+
+            // Configure spotLight shadow properties
+            spotLight.shadow.mapSize.width = 2048;
+            spotLight.shadow.mapSize.height = 2048;
+            spotLight.shadow.bias = -0.005; // Reduce shadow artifacts
+            scene.add(spotLight);
 
             // Load Car Model
             const loader = new GLTFLoader();
             loader.load(
-                "./assets/scene.gltf",
+                "./assets/Benz.glb",
                 (gltf) => {
                     carModel = gltf.scene;
-                    carModel.scale.set(2, 2, 2);
-                    scene.add(carModel);
+                    carModel.scale.set(1, 1, 1);
 
                     carModel.traverse((child) => {
-                        console.log(child.name)
-                        if (child.name.includes("Doors")) {
-                            doors.push(child.name)
-                        }
-                        if (child.name.includes("Bootlid")) {
-                            boot.push(child.name)
-                        }
-                        if (child.name.includes("Bonet")) {
-                            bonets.push(child.name)
+                        if (child.isMesh) {
+                            child.castShadow = true; // Enable shadow casting
+                            child.receiveShadow = true; // Enable shadow receiving
                         }
                     });
+                    scene.add(carModel);
 
-                    if (!doors) {
-                        console.error("Door not found! Check your model structure.");
-                    }
-                    if (!boot) {
-                        console.error("Boot not found! ")
-                    }
+                    // Organize parts for interactivity
+                    carModel.traverse((child) => {
+                        if (child.name.includes("Door")) doors.push(child.name);
+                        if (child.name.includes("Back_Bonnet")) boot.push(child.name);
+                        if (child.name.includes("Front_Bonnet")) bonets.push(child.name);
+                        if (child.name.includes("Engine")) engine.push(child.name);
+                        if (child.name.includes("Bag")) bags.push(child.name);
+                    });
+
+                    if (!doors) console.error("Door not found! Check your model structure.");
+                    if (!boot) console.error("Boot not found!");
                 },
                 undefined,
-                (error) => {
-                    console.error(error);
-                }
+                (error) => console.error(error)
             );
 
-            // Add raycasting for interaction
+            // Add event listeners for interactivity
             document.getElementById('door').addEventListener("click", openDoors);
-            document.getElementById('boot').addEventListener("click", openBoot)
+            document.getElementById('boot').addEventListener("click", openBoot);
             document.getElementById('bonet').addEventListener("click", openBonets);
-            // Add event listeners for mousemove and click events
+            document.getElementById('Engine').addEventListener("click", removeEngine);
+            document.getElementById('removeBags').addEventListener("click", removeBags);
+
             window.addEventListener('mousemove', onMouseMove);
             window.addEventListener("click", onMouseClick);
         }
+
 
         function openDoors(event) {
             if (!doors) return;
@@ -163,47 +197,143 @@
             doors.forEach((doorName) => {
                 const door = carModel.getObjectByName(doorName);
                 if (door) {
-                    // Adjust rotation based on the side
+                    // Determine target rotation based on the door's current state
+                    let targetRotation;
                     if (doorName.includes("FR") || doorName.includes("RR")) {
-                        // Left side doors
-                        door.rotation.y = door.rotation.y === 0 ? Math.PI / 2 : 0;
+                        targetRotation = door.rotation.z === 0 ? -Math.PI / 2 : 0;
                     } else if (doorName.includes("FL") || doorName.includes("RL")) {
-                        // Right side doors
-                        door.rotation.y = door.rotation.y === 0 ? -Math.PI / 2 : 0;
+                        targetRotation = door.rotation.z === 0 ? Math.PI / 2 : 0;
                     }
+
+                    // Animate door rotation using GSAP
+                    gsap.to(door.rotation, {
+                        z: targetRotation, // Target rotation
+                        duration: 1, // Animation duration in seconds
+                        ease: "power2.out", // Easing function for smooth animation
+                    });
                 }
             });
         }
 
         function openBoot() {
             if (!boot || boot.length === 0) return;
+
             boot.forEach((bootName) => {
                 const bootObj = carModel.getObjectByName(bootName);
                 if (bootObj) {
-                    // Toggle boot rotation (open/close)
-                    const isOpen = bootObj.rotation.x > 0;
-                    bootObj.rotation.x = isOpen ? 0 : Math.PI / 4; // Adjust angle as needed
+                    // Determine the target rotation
+                    const targetRotation = bootObj.rotation.x < Math.PI ? Math.PI : Math.PI / 2;
+
+                    // Animate boot opening/closing using GSAP
+                    gsap.to(bootObj.rotation, {
+                        x: targetRotation, // Target rotation
+                        duration: 1, // Duration of the animation in seconds
+                        ease: "power2.out", // Smooth easing
+                    });
                 }
             });
         }
+
         function openBonets() {
             if (!bonets || bonets.length === 0) return;
 
             bonets.forEach((bonetName) => {
                 const bonet = carModel.getObjectByName(bonetName);
                 if (bonet) {
-                    // Check if the bonnet is open (rotation < 0) or closed (rotation == 0)
-                    if (bonet.rotation.x === 0) {
-                        bonet.rotation.x = -Math.PI / 4; // Open bonnet upwards
-                    } else {
-                        bonet.rotation.x = 0; // Close bonnet
-                    }
+                    // Open/close based on current rotation
+                    const targetRotation = bonet.rotation.x === 0 ? Math.PI / 2 : 0;  // Open to Math.PI/2, close to 0
+
+                    // Animate bonet opening/closing with GSAP
+                    gsap.to(bonet.rotation, {
+                        x: targetRotation, // Target rotation
+                        duration: 1, // Duration of the animation
+                        ease: "power2.out", // Smooth easing
+                    });
                 }
             });
         }
 
 
-        // Track whether the cursor is hovering over a clickable area
+
+
+        function removeEngine() {
+            // Exit if no engine or bonet names are provided
+            if (!bonets || bonets.length === 0) return;
+            if (!engine || engine.length === 0) return;
+
+            bonets.forEach((bonetName) => {
+                const bonet = carModel.getObjectByName(bonetName);
+                if (bonet) {
+                    // Open/close bonet with correct rotation
+                    const targetRotation = bonet.rotation.x === 0 ? Math.PI / 2 : 0;  // Open to Math.PI/2, close to 0
+                    gsap.to(bonet.rotation, {
+                        x: targetRotation,  // Target rotation
+                        duration: 1,  // Duration of the animation
+                        ease: "power2.out",  // Smooth easing
+                    });
+                }
+            });
+
+            engine.forEach((engineName) => {
+                const engineObject = carModel.getObjectByName(engineName);
+                if (engineObject) {
+                    // Move engine in and out of sight
+                    const targetY = engineObject.position.y !== 2.5 ? 2.5 : 0.7692857384681702;  // Move up/down along Y-axis
+                    const targetX = engineObject.position.x !== 2 ? 2 : 0.003182236570864916;  // Move left/right along X-axis
+
+                    gsap.to(engineObject.position, {
+                        y: targetY,  // Target Y position
+                        x: targetX,  // Target X position
+                        duration: 1,  // Duration of the animation
+                        ease: "power2.out",  // Smooth easing
+                    });
+                }
+            });
+        }
+
+        function removeBags() {
+    // Exit if no boot or bags names are provided
+    if (!boot || boot.length === 0) return;
+    if (!bags || bags.length === 0) return;
+
+    // Open/close the boot with GSAP animation
+    boot.forEach((bootName) => {
+        const bootObj = carModel.getObjectByName(bootName);
+        if (bootObj) {
+            const targetRotation = bootObj.rotation.x < Math.PI ? Math.PI : Math.PI / 2; // Open/close boot
+            gsap.to(bootObj.rotation, {
+                x: targetRotation,  // Target rotation
+                duration: 1,  // Duration of the animation
+                ease: "power2.out",  // Smooth easing
+            });
+        }
+    });
+
+    // Move the bags upward first, then to the left side
+    bags.forEach((bagName) => {
+        const bagObject = carModel.getObjectByName(bagName);
+        if (bagObject) {
+            const targetY = bagObject.position.y !== 2 ? 2 : 0.7692857384681702;  // Move up/down along Y-axis
+            const targetX = bagObject.position.x !== 2 ? 2 : 0.3724234104156494;  // Move left/right along X-axis
+            // First, move the bag upward
+            gsap.to(bagObject.position, {
+                y: targetY,  // Target Y position
+                duration: 1,  // Duration for moving the bags upward
+                ease: "power2.out",  // Smooth easing
+                onComplete: () => {
+                    // After upward movement, move the bag to the left side
+                    gsap.to(bagObject.position, {
+                        x: targetX,  // Target X position
+                        duration: 1,  // Duration for moving the bags left
+                        ease: "power2.out",  // Smooth easing
+                    });
+                },
+            });
+        }
+    });
+}
+
+
         let isHovering = false;
 
         function onMouseMove(event) {
@@ -282,18 +412,45 @@
                 if (intersects.length > 0) {
                     if (objectType === 'door') {
                         // Handle door rotation
+                        let targetRotation;
+
                         if (objectName.includes("FR") || objectName.includes("RR")) {
-                            object.rotation.y = object.rotation.y === 0 ? Math.PI / 2 : 0; // Right-side doors
+                            // Right-side doors
+                            targetRotation = object.rotation.z === 0 ? -Math.PI / 2 : 0;
                         } else if (objectName.includes("FL") || objectName.includes("RL")) {
-                            object.rotation.y = object.rotation.y === 0 ? -Math.PI / 2 : 0; // Left-side doors
+                            // Left-side doors
+                            targetRotation = object.rotation.z === 0 ? Math.PI / 2 : 0;
                         }
-                    } else if ( objectType === 'boot') {
-                        // Handle bonet or boot rotation (assuming they have a similar toggle logic)
-                        object.rotation.x = object.rotation.x === 0 ? Math.PI / 2 : 0; // Toggle open/close for bonet or boot
-                    }else if (objectType === 'bonet') {
-                        // Handle bonet rotation
-                        object.rotation.x = object.rotation.x === 0 ? -Math.PI / 4 : 0; // Open/close bonet
+
+                        // Animate door rotation with GSAP
+                        gsap.to(object.rotation, {
+                            z: targetRotation, // Target rotation
+                            duration: 1, // Duration of the animation
+                            ease: "power2.out", // Smooth easing for natural movement
+                        });
+                    } else if (objectType === 'boot') {
+                        // Determine the target rotation
+                        const targetRotation = object.rotation.x < Math.PI ? Math.PI : Math.PI / 2;
+
+                        // Animate boot opening/closing using GSAP
+                        gsap.to(object.rotation, {
+                            x: targetRotation, // Target rotation
+                            duration: 1, // Duration of the animation in seconds
+                            ease: "power2.out", // Smooth easing for natural movement
+                        });
                     }
+                    else if (objectType === 'bonet') {
+                        // Determine the target rotation based on current rotation
+                        const targetRotation = object.rotation.x === 0 ? Math.PI / 2 : 0;  // Open to Math.PI/2, close to 0
+
+                        // Animate bonet opening/closing using GSAP
+                        gsap.to(object.rotation, {
+                            x: targetRotation, // Target rotation
+                            duration: 1, // Duration of the animation
+                            ease: "power2.out", // Smooth easing
+                        });
+                    }
+
                 }
             };
 
